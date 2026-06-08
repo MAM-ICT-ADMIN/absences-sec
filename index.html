@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Absences Secondaire</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&display=swap');
+
+  :root {
+    --green-dark:  #0a1a0c;
+    --green-mid:   #0f2414;
+    --green-light: #1a3a20;
+    --particle:    rgba(52,211,153,0.6);
+    --border:      rgba(52,211,153,0.10);
+    --border2:     rgba(52,211,153,0.18);
+    --text:        #d1fae5;
+    --muted:       rgba(110,231,183,0.45);
+    --muted2:      rgba(110,231,183,0.65);
+    --thead-bg:    rgba(5,30,10,0.75);
+    --row-bg:      rgba(8,24,11,0.55);
+    --row-alt:     rgba(12,32,16,0.45);
+    --pill-bg:     rgba(52,211,153,0.12);
+    --pill-bd:     rgba(52,211,153,0.28);
+    --pill-tx:     #6ee7b7;
+    --accent:      #34d399;
+  }
+
+  * { box-sizing:border-box; margin:0; padding:0; }
+
+  html, body {
+    width:100%; height:100%;
+    background:var(--green-dark);
+    color:var(--text);
+    font-family:'DM Sans',sans-serif;
+    overflow:hidden;
+  }
+
+  /* Canvas background — full viewport, behind everything */
+  #bg-canvas {
+    position:fixed; inset:0; width:100%; height:100%;
+    z-index:0; pointer-events:none;
+  }
+
+  /* Subtle vignette */
+  #vignette {
+    position:fixed; inset:0; z-index:1; pointer-events:none;
+    background:radial-gradient(ellipse at center, transparent 50%, rgba(0,8,2,0.55) 100%);
+  }
+
+  .page {
+    position:relative; z-index:2;
+    display:flex; flex-direction:column;
+    height:100vh; padding:16px 20px 12px; gap:10px;
+  }
+
+  /* TABLE WRAP */
+  .table-wrap {
+    flex:1; min-height:0;
+    background:rgba(8,22,12,0.60);
+    border:0.5px solid var(--border2);
+    border-radius:14px;
+    overflow:hidden;
+    display:flex; flex-direction:column;
+    backdrop-filter:blur(12px);
+    -webkit-backdrop-filter:blur(12px);
+  }
+
+  table { width:100%; border-collapse:collapse; }
+
+  thead { background:var(--thead-bg); border-bottom:1px solid var(--border2); flex-shrink:0; }
+  thead th {
+    padding:14px 22px;
+    font-size:13px; font-weight:500;
+    text-transform:uppercase; letter-spacing:0.9px;
+    color:var(--accent); text-align:left;
+  }
+
+  tbody { display:block; overflow:hidden; }
+  thead, tbody tr { display:table; width:100%; table-layout:fixed; }
+
+  tbody tr { border-bottom:0.5px solid var(--border); }
+  tbody tr:last-child { border-bottom:none; }
+  tbody tr:nth-child(odd)  { background:var(--row-bg); }
+  tbody tr:nth-child(even) { background:var(--row-alt); }
+
+  tbody td {
+    padding:0 22px;
+    height:var(--row-h, 52px);
+    font-size:15px; font-weight:400;
+    color:var(--text); vertical-align:middle;
+  }
+
+  .col-name  { width:24%; }
+  .col-date  { width:13%; }
+  .col-remp  { width:26%; }
+  .col-lecon { width:22%; }
+  .col-salle { width:15%; }
+
+  tbody td.col-name { font-weight:500; color:#ecfdf5; }
+
+  .dim { color:var(--muted) !important; }
+  .sub { color:var(--muted2); }
+
+  tr.sub-row td { border-top:0.5px dashed rgba(52,211,153,0.08); }
+
+  .room-pill {
+    display:inline-block; font-size:13px; font-weight:500;
+    background:var(--pill-bg); border:0.5px solid var(--pill-bd); color:var(--pill-tx);
+    padding:3px 10px; border-radius:5px;
+  }
+
+  .alert { color:#f87171; font-weight:700; }
+
+  /* PAGINATION */
+  .pagination {
+    flex-shrink:0;
+    display:flex; align-items:center; justify-content:center; gap:12px;
+    height:28px;
+  }
+  .page-dots { display:flex; gap:7px; align-items:center; }
+  .page-dot {
+    width:7px; height:7px; border-radius:50%;
+    background:rgba(52,211,153,0.2);
+    transition:background 0.35s, transform 0.35s;
+  }
+  .page-dot.active { background:var(--accent); transform:scale(1.4); }
+  .page-info { font-size:11px; color:var(--muted); min-width:70px; text-align:center; }
+
+  /* LAST UPDATE */
+  .last-update {
+    flex-shrink:0; display:flex; align-items:center; gap:6px;
+    font-size:11px; color:var(--muted); height:18px;
+  }
+  .live-dot {
+    width:6px; height:6px; border-radius:50%; flex-shrink:0;
+    background:#22c55e; animation:blink 2.5s ease-in-out infinite;
+  }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.25} }
+
+  /* ÉTATS */
+  .center-msg {
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    flex:1; gap:12px; color:var(--muted2); font-size:14px; padding:40px;
+  }
+  .spinner {
+    width:32px; height:32px;
+    border:2px solid rgba(52,211,153,0.2); border-top-color:var(--accent);
+    border-radius:50%; animation:spin 0.9s linear infinite;
+  }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
+  .tbody-fade { animation:fadeIn 0.4s ease forwards; }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:none} }
+</style>
+</head>
+<body>
+
+<canvas id="bg-canvas"></canvas>
+<div id="vignette"></div>
+
+<div class="page">
+
+  <div class="table-wrap" id="table-wrap">
+    <table id="table">
+      <thead id="thead">
+        <tr>
+          <th class="col-name">Enseignant</th>
+          <th class="col-date">Période</th>
+          <th class="col-remp">Remplaçant(e)</th>
+          <th class="col-lecon">Leçon</th>
+          <th class="col-salle">Salle</th>
+        </tr>
+      </thead>
+      <tbody id="tbody">
+        <tr><td colspan="5"><div class="center-msg"><div class="spinner"></div><span>Chargement…</span></div></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="pagination" id="pagination" style="visibility:hidden">
+    <span class="page-info" id="page-info"></span>
+    <div class="page-dots" id="page-dots"></div>
+  </div>
+
+  <div class="last-update">
+    <div class="live-dot"></div>
+    <span id="last-update">Connexion…</span>
+  </div>
+
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════
+// ⚙️  CONFIGURATION
+// ═══════════════════════════════════════════════════
+const GITHUB_USER = 'mam-ict-admin';
+const GITHUB_REPO = 'absences-sec';
+const EXCEL_FILE  = 'Absences_Sharepoint.xlsx';
+const REFRESH_MS  = 5 * 60 * 1000;
+const PAGE_MS     = 10 * 1000;
+const SHEET_INDEX = 0;
+const ROW_MIN_H   = 44;
+const ROW_MAX_H   = 72;
+
+const EXCEL_URL = () =>
+  `https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/main/${EXCEL_FILE}?v=${Date.now()}`;
+
+// ═══════════════════════════════════════════════════
+// 🌿  ANIMATION FORÊT BRUMEUSE
+// ═══════════════════════════════════════════════════
+(function initForet() {
+  const canvas = document.getElementById('bg-canvas');
+  const ctx    = canvas.getContext('2d');
+
+  let W, H, particles, mistLayers;
+
+  function resize() {
+    W = canvas.width  = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+    initScene();
+  }
+
+  function initScene() {
+    // Particules lumineuses (lucioles / spores)
+    particles = Array.from({ length: 80 }, () => ({
+      x:   Math.random() * W,
+      y:   Math.random() * H,
+      r:   Math.random() * 2.2 + 0.4,
+      vx:  (Math.random() - 0.5) * 0.35,
+      vy:  (Math.random() - 0.5) * 0.20,
+      a:   Math.random() * Math.PI * 2,
+      spd: Math.random() * 0.012 + 0.005,
+      hue: 140 + Math.random() * 30,   // vert émeraude → cyan-vert
+    }));
+
+    // Couches de brume
+    mistLayers = Array.from({ length: 5 }, (_, i) => ({
+      y:     H * (0.3 + i * 0.15),
+      amp:   30 + i * 15,
+      freq:  0.003 + i * 0.001,
+      speed: 0.0003 + i * 0.0002,
+      alpha: 0.06 - i * 0.008,
+      phase: Math.random() * Math.PI * 2,
+    }));
+  }
+
+  let t = 0;
+  function draw() {
+    // Fond dégradé forêt
+    const grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0,   '#05100a');
+    grad.addColorStop(0.4, '#0a1f10');
+    grad.addColorStop(1,   '#06120b');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    // Rayons de lumière verticaux très subtils
+    for (let i = 0; i < 4; i++) {
+      const x  = W * (0.15 + i * 0.24) + Math.sin(t * 0.08 + i) * 30;
+      const rg = ctx.createLinearGradient(x - 40, 0, x + 40, H);
+      rg.addColorStop(0,   'rgba(60,200,100,0)');
+      rg.addColorStop(0.3, `rgba(60,200,100,${0.025 + i * 0.005})`);
+      rg.addColorStop(0.7, `rgba(40,160,80,${0.018})`);
+      rg.addColorStop(1,   'rgba(30,120,60,0)');
+      ctx.fillStyle = rg;
+      ctx.beginPath();
+      ctx.moveTo(x - 50, 0);
+      ctx.lineTo(x + 50, 0);
+      ctx.lineTo(x + 25, H);
+      ctx.lineTo(x - 25, H);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // Couches de brume ondulante
+    mistLayers.forEach(m => {
+      m.phase += m.speed;
+      const rg2 = ctx.createLinearGradient(0, m.y - 60, 0, m.y + 60);
+      rg2.addColorStop(0,   'rgba(20,80,30,0)');
+      rg2.addColorStop(0.5, `rgba(20,80,30,${m.alpha})`);
+      rg2.addColorStop(1,   'rgba(20,80,30,0)');
+      ctx.fillStyle = rg2;
+      ctx.beginPath();
+      ctx.moveTo(0, m.y);
+      for (let x = 0; x <= W; x += 6) {
+        const wave = Math.sin(x * m.freq + m.phase) * m.amp
+                   + Math.sin(x * m.freq * 1.7 + m.phase * 1.3) * (m.amp * 0.4);
+        ctx.lineTo(x, m.y + wave);
+      }
+      ctx.lineTo(W, m.y + 80);
+      ctx.lineTo(0, m.y + 80);
+      ctx.closePath();
+      ctx.fill();
+    });
+
+    // Particules (spores / lucioles)
+    particles.forEach(p => {
+      p.x  += p.vx + Math.sin(p.a * 0.7) * 0.15;
+      p.y  += p.vy + Math.cos(p.a * 0.5) * 0.10;
+      p.a  += p.spd;
+
+      if (p.x < -5)  p.x = W + 5;
+      if (p.x > W+5) p.x = -5;
+      if (p.y < -5)  p.y = H + 5;
+      if (p.y > H+5) p.y = -5;
+
+      const opacity = (Math.sin(p.a * 1.8) + 1) / 2 * 0.65 + 0.08;
+
+      // Halo doux
+      const gp = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r * 4);
+      gp.addColorStop(0,   `hsla(${p.hue},80%,65%,${opacity * 0.6})`);
+      gp.addColorStop(1,   `hsla(${p.hue},80%,65%,0)`);
+      ctx.fillStyle = gp;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r * 4, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Cœur brillant
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = `hsla(${p.hue},90%,80%,${opacity})`;
+      ctx.fill();
+    });
+
+    t++;
+    requestAnimationFrame(draw);
+  }
+
+  window.addEventListener('resize', resize);
+  resize();
+  draw();
+})();
+
+// ═══════════════════════════════════════════════════
+// 📊  TABLEAU & DONNÉES
+// ═══════════════════════════════════════════════════
+function calcRowsPerPage() {
+  const wrap   = document.getElementById('table-wrap');
+  const thead  = document.getElementById('thead');
+  const wrapH  = wrap.clientHeight;
+  const theadH = thead.offsetHeight;
+  const bodyH  = wrapH - theadH;
+
+  let rows = Math.floor(bodyH / ROW_MIN_H);
+  if (rows < 1) rows = 1;
+  let rowH = Math.floor(bodyH / rows);
+  rowH = Math.min(ROW_MAX_H, Math.max(ROW_MIN_H, rowH));
+  document.documentElement.style.setProperty('--row-h', rowH + 'px');
+  return rows;
+}
+
+function parseSheet(ws) {
+  const raw = XLSX.utils.sheet_to_json(ws, { header:1, defval:'' });
+  if (raw.length < 2) return [];
+  const rows = [];
+  for (let i = 1; i < raw.length; i++) {
+    const [name, date, remp, lecon, salle] = raw[i].map(v => String(v).trim());
+    if (!name && rows.length > 0) {
+      const prev = rows[rows.length - 1];
+      if (remp && remp !== '*') prev.remplacants.push(remp);
+      if (lecon) prev.lecons.push(lecon);
+      if (salle) prev.salles.push(salle);
+    } else if (name) {
+      rows.push({
+        name, date,
+        remplacants: (remp && remp !== '*') ? [remp] : [],
+        lecons:  lecon ? [lecon] : [],
+        salles:  salle ? [salle] : [],
+        isReplaced: !!(remp && remp !== '*'),
+      });
+    }
+  }
+  return rows;
+}
+
+function toDisplayRows(rows) {
+  const out = [];
+  rows.forEach(row => {
+    if (!row.isReplaced || row.remplacants.length <= 1) {
+      out.push({ ...row, _sub: false });
+    } else {
+      row.remplacants.forEach((remp, ri) => {
+        out.push({
+          name:        ri === 0 ? row.name : '',
+          date:        ri === 0 ? row.date : '',
+          isReplaced:  row.isReplaced,
+          remplacants: [remp],
+          lecons:      [row.lecons[ri] || ''],
+          salles:      [row.salles[ri] || ''],
+          _sub:        ri > 0,
+        });
+      });
+    }
+  });
+  return out;
+}
+
+// Formate une valeur : si elle commence par !, affiche en rouge gras (sans le !)
+function fmt(val) {
+  if (!val) return '<span class="dim">—</span>';
+  if (val.startsWith('!')) {
+    return `<span class="alert">${val.slice(1)}</span>`;
+  }
+  return val;
+}
+
+function rowsHtml(drows) {
+  return drows.map(row => {
+    const remp  = row.remplacants[0] || '';
+    const lecon = row.lecons[0]      || '';
+    const salle = row.salles[0]      || '';
+    const remHtml   = fmt(remp);
+    const leconHtml = fmt(lecon);
+    const salleHtml = salle
+      ? (salle.startsWith('!')
+          ? `<span class="alert">${salle.slice(1)}</span>`
+          : `<span class="room-pill">${salle}</span>`)
+      : '<span class="dim">—</span>';
+    const nameHtml = row.name.startsWith('!')
+      ? `<span class="alert">${row.name.slice(1)}</span>`
+      : row.name;
+    const dateVal  = row.date || '';
+    const dateHtml = dateVal
+      ? (dateVal.startsWith('!')
+          ? `<span class="alert">${dateVal.slice(1)}</span>`
+          : `<span class="sub">${dateVal}</span>`)
+      : '';
+    const cls = row._sub ? ' class="sub-row"' : '';
+    return `<tr${cls}>
+      <td class="col-name">${nameHtml}</td>
+      <td class="col-date">${dateHtml}</td>
+      <td class="col-remp">${remHtml}</td>
+      <td class="col-lecon">${leconHtml}</td>
+      <td class="col-salle">${salleHtml}</td>
+    </tr>`;
+  }).join('');
+}
+
+let allDisplayRows = [], pages = [], currentPage = 0, pageTimer = null;
+
+function buildPages(drows, rpp) {
+  const p = [];
+  for (let i = 0; i < drows.length; i += rpp) p.push(drows.slice(i, i + rpp));
+  return p.length ? p : [[]];
+}
+
+function renderPage(idx) {
+  currentPage = idx;
+  const tbody = document.getElementById('tbody');
+  tbody.innerHTML = rowsHtml(pages[idx]);
+  tbody.classList.remove('tbody-fade');
+  void tbody.offsetWidth;
+  tbody.classList.add('tbody-fade');
+  updateDots();
+}
+
+function updateDots() {
+  document.getElementById('page-dots').innerHTML = pages.map((_, i) =>
+    `<div class="page-dot${i === currentPage ? ' active' : ''}"></div>`
+  ).join('');
+  document.getElementById('page-info').textContent =
+    pages.length > 1 ? `Page ${currentPage + 1} / ${pages.length}` : '';
+}
+
+function startRotation() {
+  if (pageTimer) clearInterval(pageTimer);
+  if (pages.length <= 1) return;
+  pageTimer = setInterval(() => renderPage((currentPage + 1) % pages.length), PAGE_MS);
+}
+
+function render(rows) {
+  const tbody = document.getElementById('tbody');
+  const pagEl = document.getElementById('pagination');
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="5"><div class="center-msg">Aucune absence enregistrée aujourd\'hui.</div></td></tr>';
+    pagEl.style.visibility = 'hidden';
+    return;
+  }
+  const rpp = calcRowsPerPage();
+  allDisplayRows = toDisplayRows(rows);
+  pages = buildPages(allDisplayRows, rpp);
+  pagEl.style.visibility = pages.length > 1 ? 'visible' : 'hidden';
+  renderPage(0);
+  startRotation();
+}
+
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    if (allDisplayRows.length) {
+      const rpp = calcRowsPerPage();
+      pages = buildPages(allDisplayRows, rpp);
+      const safeIdx = Math.min(currentPage, pages.length - 1);
+      document.getElementById('pagination').style.visibility =
+        pages.length > 1 ? 'visible' : 'hidden';
+      renderPage(safeIdx);
+      startRotation();
+    }
+  }, 150);
+});
+
+async function loadData() {
+  try {
+    const res = await fetch(EXCEL_URL());
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const buf = await res.arrayBuffer();
+    const wb  = XLSX.read(buf, { type:'array' });
+    const ws  = wb.Sheets[wb.SheetNames[SHEET_INDEX]];
+    render(parseSheet(ws));
+    const now = new Date();
+    document.getElementById('last-update').textContent =
+      `Mis à jour à ${now.toLocaleTimeString('fr-BE', { hour:'2-digit', minute:'2-digit' })}`;
+  } catch(err) {
+    console.error(err);
+    document.getElementById('tbody').innerHTML = `
+      <tr><td colspan="5"><div class="center-msg">
+        <span style="color:#f87171">⚠ Impossible de charger les données</span>
+        <span style="font-size:12px;color:var(--muted)">${err.message}</span>
+      </div></td></tr>`;
+    document.getElementById('last-update').textContent = 'Erreur de chargement';
+  }
+}
+
+loadData();
+setInterval(loadData, REFRESH_MS);
+</script>
+</body>
+</html>
