@@ -71,9 +71,9 @@
 
   thead { background:var(--thead-bg); border-bottom:1px solid var(--border2); flex-shrink:0; }
   thead th {
-    padding:14px 22px;
-    font-size:13px; font-weight:500;
-    text-transform:uppercase; letter-spacing:0.9px;
+    padding:24px 24px;
+    font-size:26px; font-weight:600;
+    text-transform:uppercase; letter-spacing:1.2px;
     color:var(--accent); text-align:left;
   }
 
@@ -86,17 +86,32 @@
   tbody tr:nth-child(even) { background:var(--row-alt); }
 
   tbody td {
-    padding:0 22px;
-    height:var(--row-h, 52px);
-    font-size:15px; font-weight:400;
+    padding:0 24px;
+    height:var(--row-h, 90px);
+    font-size:30px; font-weight:400;
     color:var(--text); vertical-align:middle;
+    white-space:nowrap; overflow:hidden;
   }
 
-  .col-name  { width:24%; }
-  .col-date  { width:13%; }
+  thead th { white-space:nowrap; }
+
+  /* Cellule dont le contenu deborde : on fait defiler le texte */
+  td.scroll > .scroll-inner {
+    display:inline-block;
+    white-space:nowrap;
+    will-change:transform;
+    animation:marquee var(--marquee-dur, 8s) linear infinite;
+  }
+  @keyframes marquee {
+    0%, 10%   { transform:translateX(0); }
+    90%, 100% { transform:translateX(var(--marquee-shift, -100%)); }
+  }
+
+  .col-name  { width:26%; }
+  .col-date  { width:20%; }
   .col-remp  { width:26%; }
-  .col-lecon { width:22%; }
-  .col-salle { width:15%; }
+  .col-lecon { width:18%; }
+  .col-salle { width:10%; }
 
   tbody td.col-name { font-weight:500; color:#ecfdf5; }
 
@@ -107,9 +122,9 @@
   tr.sub-row td { border-top:0.5px dashed rgba(52,211,153,0.08); }
 
   .room-pill {
-    display:inline-block; font-size:13px; font-weight:500;
-    background:var(--pill-bg); border:0.5px solid var(--pill-bd); color:var(--pill-tx);
-    padding:3px 10px; border-radius:5px;
+    display:inline-block; font-size:27px; font-weight:500;
+    background:var(--pill-bg); border:1px solid var(--pill-bd); color:var(--pill-tx);
+    padding:5px 16px; border-radius:8px;
   }
 
   .alert { color:#f87171; font-weight:700; }
@@ -117,37 +132,26 @@
   /* PAGINATION */
   .pagination {
     flex-shrink:0;
-    display:flex; align-items:center; justify-content:center; gap:12px;
-    height:28px;
+    display:flex; align-items:center; justify-content:center; gap:20px;
+    height:44px;
   }
-  .page-dots { display:flex; gap:7px; align-items:center; }
+  .page-dots { display:flex; gap:12px; align-items:center; }
   .page-dot {
-    width:7px; height:7px; border-radius:50%;
+    width:12px; height:12px; border-radius:50%;
     background:rgba(52,211,153,0.2);
     transition:background 0.35s, transform 0.35s;
   }
   .page-dot.active { background:var(--accent); transform:scale(1.4); }
-  .page-info { font-size:11px; color:var(--muted); min-width:70px; text-align:center; }
-
-  /* LAST UPDATE */
-  .last-update {
-    flex-shrink:0; display:flex; align-items:center; gap:6px;
-    font-size:11px; color:var(--muted); height:18px;
-  }
-  .live-dot {
-    width:6px; height:6px; border-radius:50%; flex-shrink:0;
-    background:#22c55e; animation:blink 2.5s ease-in-out infinite;
-  }
-  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.25} }
+  .page-info { font-size:18px; color:var(--muted); min-width:120px; text-align:center; }
 
   /* ÉTATS */
   .center-msg {
     display:flex; flex-direction:column; align-items:center; justify-content:center;
-    flex:1; gap:12px; color:var(--muted2); font-size:14px; padding:40px;
+    flex:1; gap:20px; color:var(--muted2); font-size:26px; padding:40px;
   }
   .spinner {
-    width:32px; height:32px;
-    border:2px solid rgba(52,211,153,0.2); border-top-color:var(--accent);
+    width:52px; height:52px;
+    border:3px solid rgba(52,211,153,0.2); border-top-color:var(--accent);
     border-radius:50%; animation:spin 0.9s linear infinite;
   }
   @keyframes spin { to { transform:rotate(360deg); } }
@@ -185,11 +189,6 @@
     <div class="page-dots" id="page-dots"></div>
   </div>
 
-  <div class="last-update">
-    <div class="live-dot"></div>
-    <span id="last-update">Connexion…</span>
-  </div>
-
 </div>
 
 <script>
@@ -202,8 +201,8 @@ const EXCEL_FILE  = 'Absences_Sharepoint.xlsx';
 const REFRESH_MS  = 5 * 60 * 1000;
 const PAGE_MS     = 10 * 1000;
 const SHEET_INDEX = 0;
-const ROW_MIN_H   = 44;
-const ROW_MAX_H   = 72;
+const ROW_MIN_H   = 78;
+const ROW_MAX_H   = 120;
 
 const EXCEL_URL = () =>
   `https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/main/${EXCEL_FILE}?v=${Date.now()}`;
@@ -430,11 +429,11 @@ function rowsHtml(drows) {
       : '';
     const cls = row._sub ? ' class="sub-row"' : '';
     return `<tr${cls}>
-      <td class="col-name">${nameHtml}</td>
-      <td class="col-date">${dateHtml}</td>
-      <td class="col-remp">${remHtml}</td>
-      <td class="col-lecon">${leconHtml}</td>
-      <td class="col-salle">${salleHtml}</td>
+      <td class="col-name"><span class="scroll-inner">${nameHtml}</span></td>
+      <td class="col-date"><span class="scroll-inner">${dateHtml}</span></td>
+      <td class="col-remp"><span class="scroll-inner">${remHtml}</span></td>
+      <td class="col-lecon"><span class="scroll-inner">${leconHtml}</span></td>
+      <td class="col-salle"><span class="scroll-inner">${salleHtml}</span></td>
     </tr>`;
   }).join('');
 }
@@ -454,7 +453,33 @@ function renderPage(idx) {
   tbody.classList.remove('tbody-fade');
   void tbody.offsetWidth;
   tbody.classList.add('tbody-fade');
+  applyMarquee(tbody);
   updateDots();
+}
+
+// Detecte les cellules dont le contenu deborde et active le defilement
+function applyMarquee(tbody) {
+  tbody.querySelectorAll('td').forEach(td => {
+    const inner = td.querySelector('.scroll-inner');
+    if (!inner) return;
+    // Largeur dispo dans la cellule (moins le padding horizontal)
+    const cs = getComputedStyle(td);
+    const avail = td.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    const full  = inner.scrollWidth;
+    if (full > avail + 2) {
+      td.classList.add('scroll');
+      // On decale juste assez pour reveler la fin du texte (+ petite marge)
+      const shift = (full - avail) + 24;
+      // Vitesse ~60px/s, duree totale incluant les pauses aux extremites
+      const dur = Math.max(7, (shift / 60) + 4);
+      inner.style.setProperty('--marquee-shift', `-${shift}px`);
+      inner.style.setProperty('--marquee-dur', `${dur}s`);
+    } else {
+      td.classList.remove('scroll');
+      inner.style.removeProperty('--marquee-shift');
+      inner.style.removeProperty('--marquee-dur');
+    }
+  });
 }
 
 function updateDots() {
@@ -511,9 +536,6 @@ async function loadData() {
     const wb  = XLSX.read(buf, { type:'array' });
     const ws  = wb.Sheets[wb.SheetNames[SHEET_INDEX]];
     render(parseSheet(ws));
-    const now = new Date();
-    document.getElementById('last-update').textContent =
-      `Mis à jour à ${now.toLocaleTimeString('fr-BE', { hour:'2-digit', minute:'2-digit' })}`;
   } catch(err) {
     console.error(err);
     document.getElementById('tbody').innerHTML = `
@@ -521,7 +543,6 @@ async function loadData() {
         <span style="color:#f87171">⚠ Impossible de charger les données</span>
         <span style="font-size:12px;color:var(--muted)">${err.message}</span>
       </div></td></tr>`;
-    document.getElementById('last-update').textContent = 'Erreur de chargement';
   }
 }
 
